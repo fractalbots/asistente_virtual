@@ -1,0 +1,10 @@
+venv/ 
+.venv/ 
+__pycache__/ 
+*.py[cod] 
+*.egg-info/ 
+.env 
+config.ini
+audio/ 
+*.db 
+*.log 
