@@ -1,0 +1,467 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Asistente de clase</title>
+<meta name="theme-color" content="#0B2B26">
+<script>
+try{var t=localStorage.getItem('tema');if(!t)t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.dataset.tema=t}catch(e){document.documentElement.dataset.tema='light'}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=DM+Mono:wght@400;500&family=Figtree:wght@400..700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<style>
+:root{
+  --bg:#EEF3F0; --panel:#FFFFFF; --ink:#0F2420; --muted:#5B706A; --line:#D5E0DB;
+  --board:#0B2B26; --accent:#1F6FEB; --accent-d:#154BA8; --on:#17A864; --rec:#E5383B; --wait:#E59F0B;
+  --r:16px;
+}
+:root[data-tema=dark]{
+  --bg:#07201C; --panel:#0D332D; --ink:#E7F3EE; --muted:#8FB0A6; --line:#1B4A41;
+  --board:#041713; --accent:#4C97FF; --accent-d:#2563C4; --on:#2FD58A; --rec:#FF5A5D; --wait:#FFB52E;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.5 Figtree,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:'Bricolage Grotesque',Figtree,sans-serif;line-height:1.1;margin:0;letter-spacing:-.02em}
+h1{font-size:clamp(28px,5vw,40px);font-weight:700}
+h2{font-size:20px;font-weight:650}
+h3{font-size:16px;font-weight:650;margin:18px 0 8px}
+p{margin:0}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.muted{color:var(--muted)}
+.sub{color:var(--muted);margin-top:6px}
+
+/* Botones */
+.btn{appearance:none;border:0;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:10px;
+  font-weight:650;font-size:15px;padding:12px 22px;border-radius:999px;background:var(--accent);color:#fff;
+  box-shadow:0 4px 0 var(--accent-d);transition:transform .08s,box-shadow .08s}
+.btn:active{transform:translateY(3px);box-shadow:0 1px 0 var(--accent-d)}
+.btn svg{width:20px;height:20px}
+.btn.small{padding:9px 16px;font-size:14px;box-shadow:0 3px 0 var(--accent-d)}
+.btn.ghost{background:transparent;color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--line)}
+.btn.ghost:active{transform:none;background:var(--line)}
+.btn.arcade{width:100%;font-size:18px;padding:18px 24px;border-radius:24px;
+  box-shadow:0 7px 0 var(--accent-d),0 18px 26px -12px color-mix(in srgb,var(--accent) 70%,transparent),inset 0 0 0 3px rgba(255,255,255,.22)}
+.btn.arcade:active{transform:translateY(5px);box-shadow:0 2px 0 var(--accent-d),inset 0 0 0 3px rgba(255,255,255,.22)}
+.btn[disabled]{opacity:.7;cursor:progress}
+.icon{appearance:none;border:0;background:transparent;width:42px;height:42px;border-radius:50%;display:grid;place-items:center;cursor:pointer;color:var(--muted)}
+.icon:hover{background:var(--line);color:var(--ink)}
+.icon svg{width:22px;height:22px}
+
+/* Estructura */
+.shell{min-height:100dvh;display:grid;grid-template-columns:232px minmax(0,1fr)}
+.shell.solo{grid-template-columns:minmax(0,1fr)}
+.rail{position:sticky;top:0;height:100dvh;padding:26px 16px;border-right:1px solid var(--line);display:flex;flex-direction:column;gap:28px}
+.brand{display:flex;align-items:center;gap:12px;padding:0 8px}
+.brand svg{width:34px;height:34px;color:var(--accent)}
+.brand b{font:700 17px/1.1 'Bricolage Grotesque',sans-serif;display:block}
+.brand span{font-size:13px;color:var(--muted)}
+.nav{display:flex;flex-direction:column;gap:4px}
+.nav button{appearance:none;border:0;background:none;display:flex;align-items:center;gap:12px;padding:12px;border-radius:12px;cursor:pointer;font-weight:550;color:var(--muted);text-align:left}
+.nav button svg{width:22px;height:22px}
+.nav button:hover{background:var(--line);color:var(--ink)}
+.nav button[aria-current=page]{background:var(--ink);color:var(--bg)}
+.main{padding:32px clamp(18px,4vw,48px) 120px;max-width:1080px;width:100%;min-width:0}
+.main.solo{margin:0 auto;max-width:620px}
+.head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:26px}
+.acts{display:flex;gap:2px;flex:none}
+.tabbar{display:none}
+.blk{margin-top:34px}
+.blk>h2{margin-bottom:6px}
+.count{font:500 14px 'DM Mono',monospace;color:var(--muted);margin-left:6px}
+
+/* Panel de estado (la caja) */
+.board{position:relative;display:grid;grid-template-columns:auto 1fr;gap:22px;padding:24px;border-radius:22px;color:#E7F3EE;background:
+  repeating-linear-gradient(90deg,rgba(255,255,255,.035) 0 1px,transparent 1px 28px),
+  repeating-linear-gradient(0deg,rgba(255,255,255,.035) 0 1px,transparent 1px 28px),var(--board)}
+.leds{display:flex;flex-direction:column;gap:12px;justify-content:center}
+.led{width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,.1);display:block;transition:background .3s,box-shadow .3s}
+.led.g.on{background:#2FD58A;box-shadow:0 0 18px 3px rgba(47,213,138,.7)}
+.led.r.on{background:#FF4D4F;box-shadow:0 0 18px 3px rgba(255,77,79,.75);animation:pulso 1.2s ease-in-out infinite}
+.led.a.on{background:#FFB52E;box-shadow:0 0 18px 3px rgba(255,181,46,.7)}
+@keyframes pulso{50%{opacity:.45}}
+.board h2{font-size:clamp(24px,4vw,32px);font-weight:700}
+.board p{color:#A9C7BE;margin-top:6px}
+.rec{display:flex;align-items:baseline;gap:14px;margin-top:14px;flex-wrap:wrap}
+.timer{font:500 clamp(30px,6vw,44px)/1 'DM Mono',monospace;letter-spacing:.02em;color:#fff}
+
+/* Filas y listas */
+.row{display:flex;align-items:center;gap:14px;padding:14px 0;border-bottom:1px solid var(--line)}
+.row:last-child{border-bottom:0}
+.grow{flex:1;min-width:0}
+.grow strong{display:block;font-weight:650}
+.grow small{display:block;color:var(--muted);font-size:14px}
+.num{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;flex:none;font:700 15px 'Bricolage Grotesque',sans-serif;background:var(--ink);color:var(--bg)}
+.hora{font:400 14px 'DM Mono',monospace;color:var(--muted);text-align:right}
+.strip{display:grid;grid-template-columns:repeat(3,1fr);margin:34px 0 0;border-block:1px solid var(--line)}
+.strip div{padding:20px 0 20px 20px;border-left:1px solid var(--line)}
+.strip div:first-child{border-left:0;padding-left:0}
+.strip dt{color:var(--muted);font-size:14px}
+.strip dd{margin:2px 0 0;font:700 34px 'Bricolage Grotesque',sans-serif;letter-spacing:-.02em}
+.pill{font:600 13px 'DM Mono',monospace;padding:4px 10px;border-radius:999px;background:var(--line);color:var(--ink);flex:none}
+.pill.ok{background:color-mix(in srgb,var(--on) 22%,transparent);color:var(--on)}
+.pill.no{background:color-mix(in srgb,var(--rec) 18%,transparent);color:var(--rec)}
+.tag{font-size:13px;padding:3px 10px;border-radius:999px;border:1px solid var(--line);color:var(--muted);flex:none}
+.tags{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.vacio{padding:26px 0;color:var(--muted)}
+.vacio strong{display:block;color:var(--ink);margin-bottom:2px}
+
+/* Clases */
+.chips{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;margin-bottom:10px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{appearance:none;border:0;cursor:pointer;white-space:nowrap;padding:9px 16px;border-radius:999px;font-weight:600;font-size:14px;background:transparent;box-shadow:inset 0 0 0 1.5px var(--line);color:var(--ink);transition:background .15s}
+.chip[aria-pressed=true]{background:var(--ink);color:var(--bg);box-shadow:none}
+.clase{border-bottom:1px solid var(--line)}
+.clase summary{display:flex;align-items:center;gap:14px;padding:16px 0;cursor:pointer;list-style:none}
+.clase summary::-webkit-details-marker{display:none}
+.clase summary::after{content:'';width:9px;height:9px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg);transition:transform .2s;flex:none;margin:0 4px 4px 4px}
+.clase[open] summary::after{transform:rotate(-135deg);margin-bottom:-2px}
+.cuerpo{padding:0 0 22px;max-width:70ch}
+.cuerpo p{line-height:1.6}
+.tareas{margin:0;padding:0;list-style:none;display:grid;gap:8px}
+.tareas li{padding-left:28px;position:relative}
+.tareas li::before{content:'';position:absolute;left:0;top:4px;width:16px;height:16px;border-radius:5px;border:2px solid var(--accent)}
+.btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+.trbox{margin-top:14px;padding:14px;border-radius:12px;background:var(--bg);font:400 14px/1.6 'DM Mono',monospace;white-space:pre-wrap}
+
+/* Asistencia */
+.sel{appearance:none;width:100%;max-width:520px;padding:13px 16px;border-radius:14px;border:1.5px solid var(--line);background:var(--panel);font-weight:550;margin:6px 0 20px}
+.resumen{display:flex;align-items:center;gap:22px;margin-bottom:26px;flex-wrap:wrap}
+.ringbox{position:relative;flex:none}
+.ringbox svg{display:block;transform:rotate(-90deg)}
+.ringbox .trk{stroke:var(--line)}
+.ringbox .val{stroke:var(--accent);stroke-linecap:round;transition:stroke-dashoffset .7s ease}
+.rnum{position:absolute;inset:0;display:grid;place-content:center;text-align:center;font:700 30px 'Bricolage Grotesque',sans-serif}
+.rnum small{font-size:15px;color:var(--muted);font-weight:600}
+.pads{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:20px 10px}
+.pad{appearance:none;border:0;background:none;display:flex;flex-direction:column;align-items:center;gap:9px;cursor:pointer;color:var(--muted);font-weight:600;font-size:13px;line-height:1.2;text-align:center;padding:4px}
+.pad .dot{width:58px;height:58px;border-radius:50%;display:grid;place-items:center;font:700 17px 'Bricolage Grotesque',sans-serif;background:var(--line);transition:all .2s}
+.pad:active .dot{transform:scale(.92)}
+.pad[aria-pressed=true]{color:var(--ink)}
+.pad[aria-pressed=true] .dot{background:var(--on);color:#04281A;box-shadow:0 0 0 5px color-mix(in srgb,var(--on) 25%,transparent),0 0 24px color-mix(in srgb,var(--on) 65%,transparent)}
+
+/* Alumnos */
+.search{display:flex;align-items:center;gap:10px;padding:0 16px;border-radius:14px;border:1.5px solid var(--line);background:var(--panel);max-width:420px}
+.search svg{width:20px;height:20px;color:var(--muted);flex:none}
+.search input{border:0;background:none;padding:13px 0;width:100%;outline:none}
+.av{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;flex:none;font:700 15px 'Bricolage Grotesque',sans-serif;background:var(--line)}
+.bar{height:6px;border-radius:3px;background:var(--line);width:90px;overflow:hidden;flex:none}
+.bar i{display:block;height:100%;background:var(--on)}
+
+/* Vista alumno */
+.hero-al{display:grid;grid-template-columns:auto 1fr;gap:24px;align-items:center;padding:22px;border-radius:22px;background:var(--panel);box-shadow:0 0 0 1px var(--line)}
+.hero-al .cap{color:var(--muted);font-size:14px;text-align:center;margin-top:6px}
+
+/* Modal y aviso */
+.modal{position:fixed;inset:0;z-index:50;display:grid;place-items:center;padding:20px;background:rgba(3,15,12,.66);backdrop-filter:blur(4px)}
+.sheet{background:var(--panel);border-radius:26px;padding:24px;width:100%;max-width:360px;text-align:center}
+.sheet img{width:100%;max-width:260px;aspect-ratio:1;image-rendering:pixelated;background:#fff;padding:12px;border-radius:18px;margin:14px auto}
+.sheet h2{font-size:22px}
+.sheet code{display:block;font:500 13px 'DM Mono',monospace;color:var(--muted);margin-bottom:16px}
+.toast{position:fixed;left:50%;bottom:96px;transform:translateX(-50%);z-index:60;background:var(--ink);color:var(--bg);padding:12px 20px;border-radius:999px;font-weight:600;font-size:14px;max-width:90vw;box-shadow:0 10px 30px -10px rgba(0,0,0,.5)}
+
+/* Entrada */
+.login{min-height:100dvh;display:grid;grid-template-columns:1.05fr 1fr}
+.hero{display:grid;place-items:center;padding:40px;color:#E7F3EE;background:
+  repeating-linear-gradient(90deg,rgba(255,255,255,.035) 0 1px,transparent 1px 28px),
+  repeating-linear-gradient(0deg,rgba(255,255,255,.035) 0 1px,transparent 1px 28px),#0B2B26}
+.np{position:relative;width:260px;height:260px}
+.np i{--c:hsl(calc(150 + var(--i)*13) 90% 58%);position:absolute;left:50%;top:50%;width:16px;height:16px;margin:-8px;border-radius:50%;
+  background:var(--c);box-shadow:0 0 14px var(--c);transform:rotate(calc(var(--i)*22.5deg)) translateY(-108px);
+  animation:chase 2.4s linear infinite;animation-delay:calc(var(--i)*.15s)}
+@keyframes chase{0%{opacity:1}70%,100%{opacity:.14}}
+.np-c{position:absolute;inset:0;display:grid;place-content:center;text-align:center}
+.np-c b{font:700 26px 'Bricolage Grotesque',sans-serif;letter-spacing:-.02em}
+.np-c span{font-size:14px;color:#A9C7BE;margin-top:4px}
+.formwrap{display:grid;place-items:center;padding:32px 22px}
+#f{width:100%;max-width:380px;display:grid;gap:18px}
+#f label{display:grid;gap:7px;font-weight:600;font-size:14px}
+#f input{padding:14px 16px;border-radius:14px;border:1.5px solid var(--line);background:var(--panel);font-size:16px;width:100%}
+#f input:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 22%,transparent)}
+.pw{position:relative;display:block}
+.pw input{padding-right:52px}
+.pw .icon{position:absolute;right:4px;top:50%;transform:translateY(-50%)}
+.err{color:var(--rec);font-weight:600;font-size:14px}
+
+@media (max-width:860px){
+  .shell{grid-template-columns:minmax(0,1fr)}
+  .rail{display:none}
+  .main{padding-top:22px;padding-bottom:110px}
+  .tabbar{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--panel);border-top:1px solid var(--line);padding:6px 6px calc(6px + env(safe-area-inset-bottom))}
+  .tabbar button{appearance:none;border:0;background:none;display:grid;justify-items:center;gap:2px;padding:8px 0;border-radius:12px;font-size:11.5px;font-weight:600;color:var(--muted);cursor:pointer}
+  .tabbar button svg{width:23px;height:23px}
+  .tabbar button[aria-current=page]{color:var(--accent)}
+  .login{grid-template-columns:1fr}
+  .hero{padding:28px 0 18px}
+  .np{transform:scale(.72);margin:-34px 0}
+  .strip dd{font-size:28px}
+  .board{padding:20px;gap:16px}
+  .hero-al{grid-template-columns:1fr;justify-items:center;text-align:center}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const SUPABASE_URL='https://ehabintrmxtdllxugbod.supabase.co';
+const SUPABASE_KEY='sb_publishable_TDE-BTpWobSWBEf5DrcQIw_mm2-pPoe';
+const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+
+const ORDEN=['Octavo EGB','Noveno EGB','Décimo EGB','Primero BGU','Segundo BGU','Tercero BGU'];
+const DIAS={1:'Lunes',2:'Martes',3:'Miércoles',4:'Jueves',5:'Viernes',6:'Sábado',7:'Domingo'};
+const NAV=[['inicio','Inicio','home'],['clases','Clases','book'],['asistencia','Asistencia','check'],['alumnos','Alumnos','users'],['horario','Horario','calendar']];
+const ICON={
+ home:'<path d="M3 11l9-8 9 8v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
+ book:'<path d="M4 4h12a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3z"/><path d="M8 8h7M8 12h7"/>',
+ check:'<circle cx="12" cy="12" r="9"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/>',
+ users:'<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.7a3.5 3.5 0 0 1 0 6.6M18.5 14.2A6.5 6.5 0 0 1 21.5 20"/>',
+ calendar:'<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+ qr:'<rect x="3" y="3" width="7" height="7" rx="1.2"/><rect x="14" y="3" width="7" height="7" rx="1.2"/><rect x="3" y="14" width="7" height="7" rx="1.2"/><path d="M14 14h3v3M21 14v1M14 21h3M21 18v3"/>',
+ logout:'<path d="M9 4H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4M16 8l4 4-4 4M20 12H9"/>',
+ sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+ moon:'<path d="M20 14.5A8 8 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/>',
+ eye:'<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+ search:'<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>'
+};
+const icon=n=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[n]}</svg>`;
+const MARCA='<svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M20 4L37 35H3z"/><path d="M20 20l8.5 15h-17z" fill="currentColor" stroke="none"/><path d="M20 4l8.5 15.5h-17z" opacity=".45"/></svg>';
+
+const S={user:null,rol:null,cursos:[],est:[],clases:[],asist:[],horarios:[],estado:null,tab:'inicio',fCurso:'todos',cursoAsist:null,claseSel:null,asistMap:new Map(),canal:null};
+const $=(s,el=document)=>el.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const titulo=s=>String(s||'').toLowerCase().replace(/(^|\s)\S/g,m=>m.toUpperCase());
+const corto=e=>`${titulo((e.nombres||'').split(' ')[0])} ${titulo((e.apellidos||'').split(' ')[0])}`.trim();
+const inic=e=>((e.nombres||'?')[0]+(e.apellidos||'')[0]).toUpperCase();
+const hoyDia=()=>{const d=new Date().getDay();return d===0?7:d};
+const fFecha=d=>new Date(d).toLocaleDateString('es-EC',{weekday:'short',day:'numeric',month:'short'});
+const curso=id=>S.cursos.find(c=>c.id===id);
+const nomCurso=id=>curso(id)?.nombre||'';
+const alumnosDe=id=>S.est.filter(e=>e.curso_id===id&&e.activo!==false);
+const clasesDe=id=>S.clases.filter(c=>c.curso_id===id&&c.estado==='completada');
+function armarMapa(){S.asistMap=new Map();for(const a of S.asist){if(!S.asistMap.has(a.clase_id))S.asistMap.set(a.clase_id,new Set());S.asistMap.get(a.clase_id).add(a.estudiante_id)}}
+function pctAlumno(e){const cl=clasesDe(e.curso_id);if(!cl.length)return null;return Math.round(cl.filter(c=>S.asistMap.get(c.id)?.has(e.id)).length*100/cl.length)}
+let rid=0;
+function ring(p,size){const r=size/2-8,c=2*Math.PI*r;rid++;
+ return `<div class="ringbox" style="width:${size}px;height:${size}px"><svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"><circle class="trk" cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke-width="8"/><circle class="val" cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke-width="8" stroke-dasharray="${c}" stroke-dashoffset="${c*(1-p/100)}"/></svg><div class="rnum"><span>${p}<small>%</small></span></div></div>`}
+function toast(t){const old=$('.toast');if(old)old.remove();const el=document.createElement('div');el.className='toast';el.setAttribute('role','status');el.textContent=t;document.body.appendChild(el);setTimeout(()=>el.remove(),3200)}
+const vacio=(t,p)=>`<div class="vacio"><strong>${esc(t)}</strong><p>${esc(p)}</p></div>`;
+
+/* ---------- Datos ---------- */
+async function cargar(){
+  const docente=S.rol==='docente';
+  const [cu,es,cl,as,ho,st]=await Promise.all([
+    sb.from('cursos').select('id,nombre,paralelo'),
+    sb.from('estudiantes').select('id,curso_id,nombres,apellidos,codigo_qr,activo,user_id').order('apellidos'),
+    sb.from('clases').select('id,curso_id,tema,estado,inicio,fin,duracion_seg,resumen,temas,tareas,origen').order('inicio',{ascending:false}),
+    sb.from('asistencias').select('clase_id,estudiante_id,metodo,hora'),
+    sb.from('horarios').select('*').order('dia_semana').order('orden'),
+    docente?sb.from('estado_dispositivo').select('*').eq('id',1).maybeSingle():Promise.resolve({data:null})
+  ]);
+  const fallo=[cu,es,cl,as,ho,st].find(r=>r.error);
+  if(fallo){toast('No se pudieron cargar los datos. Revisa tu conexión.');return}
+  S.cursos=(cu.data||[]).sort((a,b)=>ORDEN.indexOf(a.nombre)-ORDEN.indexOf(b.nombre));
+  S.est=es.data||[];S.clases=cl.data||[];S.asist=as.data||[];S.horarios=ho.data||[];S.estado=st.data;
+  armarMapa();
+}
+let tRec=null;
+function suscribir(){
+  if(S.rol!=='docente'||S.canal)return;
+  const suave=()=>{clearTimeout(tRec);tRec=setTimeout(async()=>{await cargar();render()},500)};
+  S.canal=sb.channel('panel')
+   .on('postgres_changes',{event:'*',schema:'public',table:'estado_dispositivo'},p=>{S.estado=p.new;suave()})
+   .on('postgres_changes',{event:'*',schema:'public',table:'asistencias'},suave)
+   .on('postgres_changes',{event:'*',schema:'public',table:'clases'},suave)
+   .subscribe();
+}
+
+/* ---------- Entrada ---------- */
+function renderLogin(){
+  $('#app').innerHTML=`<main class="login"><section class="hero"><div class="np" aria-hidden="true">${Array.from({length:16},(_,i)=>`<i style="--i:${i}"></i>`).join('')}<div class="np-c"><b>AulaBot COLEGIO CHARLES BABBAGE</b><span>by FRACTALBOTS</span></div></div></section>
+  <section class="formwrap"><form id="f" novalidate><div><h1>Asistente de clase</h1><p class="sub">Entra con tu correo y tu contraseña.</p></div>
+  <label>Correo<input id="em" type="email" inputmode="email" autocomplete="username" autocapitalize="none" required placeholder="nombre.apellido@charlesbabbage.com"></label>
+  <label>Contraseña<span class="pw"><input id="pw" type="password" autocomplete="current-password" required><button type="button" class="icon" data-a="verpw" aria-label="Mostrar contraseña">${icon('eye')}</button></span></label>
+  <p id="err" class="err" role="alert" hidden></p>
+  <button class="btn arcade" id="go" type="submit">Entrar</button></form></section></main>`;
+  $('#f').addEventListener('submit',login);
+}
+async function login(e){
+  e.preventDefault();
+  const em=$('#em').value.trim().toLowerCase(),pw=$('#pw').value,err=$('#err'),go=$('#go');
+  err.hidden=true;
+  if(!em||!pw){err.textContent='Escribe tu correo y tu contraseña.';err.hidden=false;return}
+  go.disabled=true;go.textContent='Entrando…';
+  const {data,error}=await sb.auth.signInWithPassword({email:em,password:pw});
+  if(error){go.disabled=false;go.textContent='Entrar';err.textContent='El correo o la contraseña no coinciden. Revisa que no haya espacios.';err.hidden=false;return}
+  await entrar(data.user);
+}
+async function entrar(user){
+  S.user=user;S.rol=user.app_metadata?.rol==='docente'?'docente':'alumno';S.tab='inicio';
+  await cargar();suscribir();render();
+}
+async function salir(){
+  try{if(S.canal)await sb.removeChannel(S.canal)}catch(e){}
+  S.canal=null;await sb.auth.signOut();
+  Object.assign(S,{user:null,rol:null,cursos:[],est:[],clases:[],asist:[],horarios:[],estado:null});
+  renderLogin();
+}
+
+/* ---------- Docente ---------- */
+const head=(t,sub)=>`<header class="head"><div><h1>${t}</h1>${sub?`<p class="sub">${sub}</p>`:''}</div><div class="acts"><button class="icon" data-a="tema" aria-label="Cambiar entre tema claro y oscuro">${icon(document.documentElement.dataset.tema==='dark'?'sun':'moon')}</button><button class="icon" data-a="salir" aria-label="Cerrar sesión">${icon('logout')}</button></div></header>`;
+function render(){
+  if(!S.user){renderLogin();return}
+  $('#app').innerHTML=S.rol==='docente'?shell():vistaAlumno();
+  tick();
+}
+function shell(){
+  const nav=NAV.map(([k,t,i])=>`<button data-a="tab" data-v="${k}" ${S.tab===k?'aria-current="page"':''}>${icon(i)}<span>${t}</span></button>`).join('');
+  const vistas={inicio:vInicio,clases:vClases,asistencia:vAsistencia,alumnos:vAlumnos,horario:vHorario};
+  return `<div class="shell"><aside class="rail"><div class="brand">${MARCA}<div><b>Fractal-BOTS</b><span>Asistente de clase</span></div></div><nav class="nav" aria-label="Secciones">${nav}</nav></aside><main class="main" id="main">${vistas[S.tab]()}</main><nav class="tabbar" aria-label="Secciones">${nav}</nav></div>`;
+}
+const filaHorario=h=>`<div class="row"><span class="num">${h.orden}</span><div class="grow"><strong>${esc(nomCurso(h.curso_id))}</strong><small>${esc(h.materia)}</small></div>${h.hora_inicio?`<span class="hora">${esc(h.hora_inicio.slice(0,5))}${h.hora_fin?' a '+esc(h.hora_fin.slice(0,5)):''}</span>`:''}</div>`;
+function panelEstado(){
+  const e=S.estado?.estado||'libre';
+  const act=S.clases.find(c=>c.estado==='grabando');
+  const T={libre:['Listo para grabar','Presiona el botón de la caja para empezar la clase.'],grabando:['Grabando la clase','Presiona de nuevo el botón de la caja para terminarla.'],procesando:['Resumiendo con IA','La clase terminó. El resumen aparece aquí en unos minutos.'],error:['Algo falló','Revisa el programa en la laptop y vuelve a intentarlo.']}[e]||['Sin señal','No se pudo leer el estado de la caja.'];
+  return `<section class="board" aria-live="polite" aria-label="Estado de la caja"><div class="leds"><i class="led g ${e==='libre'?'on':''}"></i><i class="led r ${e==='grabando'?'on':''}"></i><i class="led a ${e==='procesando'?'on':''}"></i></div><div><h2>${T[0]}</h2><p>${T[1]}</p>${act&&e==='grabando'?`<div class="rec"><span class="timer" id="timer" data-t="${esc(act.inicio)}">00:00:00</span><span>${esc(nomCurso(act.curso_id))}</span></div>`:''}</div></section>`;
+}
+function vInicio(){
+  const hoy=S.horarios.filter(h=>h.dia_semana===hoyDia()).sort((a,b)=>a.orden-b.orden);
+  const comp=S.clases.filter(c=>c.estado==='completada');
+  let pres=0,tot=0;for(const c of comp){tot+=alumnosDe(c.curso_id).length;pres+=S.asistMap.get(c.id)?.size||0}
+  const h=new Date().getHours(),saludo=h<12?'Buenos días':h<19?'Buenas tardes':'Buenas noches';
+  const fecha=new Date().toLocaleDateString('es-EC',{weekday:'long',day:'numeric',month:'long'});
+  let hoyHtml;
+  if(hoy.length)hoyHtml=hoy.map(filaHorario).join('');
+  else{const d=hoyDia();const sig=[...S.horarios].sort((a,b)=>((a.dia_semana-d+7)%7)-((b.dia_semana-d+7)%7))[0];hoyHtml=vacio('Hoy no hay clases en el laboratorio',sig?`La próxima es el ${DIAS[sig.dia_semana].toLowerCase()}.`:'Todavía no hay un horario cargado.')}
+  const rec=comp.slice(0,4).map(c=>`<div class="row"><div class="grow"><strong>${esc(c.tema||'Clase sin tema')}</strong><small>${esc(nomCurso(c.curso_id))}, ${fFecha(c.inicio)}</small></div><span class="pill ${(S.asistMap.get(c.id)?.size||0)===alumnosDe(c.curso_id).length?'ok':''}">${S.asistMap.get(c.id)?.size||0}/${alumnosDe(c.curso_id).length}</span></div>`).join('');
+  return head(`${saludo}, profe`,fecha.charAt(0).toUpperCase()+fecha.slice(1))+panelEstado()+
+   `<section class="blk"><h2>Hoy en el laboratorio</h2>${hoyHtml}</section>
+    <dl class="strip"><div><dt>Clases registradas</dt><dd>${comp.length}</dd></div><div><dt>Asistencia promedio</dt><dd>${tot?Math.round(pres*100/tot):0}%</dd></div><div><dt>Alumnos</dt><dd>${S.est.length}</dd></div></dl>
+    <section class="blk"><h2>Últimas clases</h2>${rec||vacio('Aún no hay clases','Cuando termines la primera grabación aparecerá aquí.')}</section>`;
+}
+function chips(accion,sel,conTodos){
+  return `<div class="chips" role="group" aria-label="Filtrar por curso">${conTodos?`<button class="chip" aria-pressed="${sel==='todos'}" data-a="${accion}" data-v="todos">Todos</button>`:''}${S.cursos.map(c=>`<button class="chip" aria-pressed="${sel===c.id}" data-a="${accion}" data-v="${c.id}">${esc(c.nombre)}</button>`).join('')}</div>`;
+}
+function claseItem(c){
+  const tot=alumnosDe(c.curso_id).length,pres=S.asistMap.get(c.id)?.size||0;
+  return `<details class="clase"><summary><div class="grow"><strong>${esc(c.tema||'Clase sin tema')}</strong><small>${esc(nomCurso(c.curso_id))}, ${fFecha(c.inicio)}</small></div>${c.origen==='demo'?'<span class="tag">Prueba</span>':''}<span class="pill ${pres===tot&&tot?'ok':''}">${pres}/${tot}</span></summary>
+  <div class="cuerpo">${c.resumen?`<p>${esc(c.resumen)}</p>`:'<p class="muted">Esta clase todavía no tiene resumen.</p>'}
+  ${(c.temas||[]).length?`<div class="tags">${c.temas.map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</div>`:''}
+  ${(c.tareas||[]).length?`<h3>Tareas enviadas</h3><ul class="tareas">${c.tareas.map(t=>`<li>${esc(t)}</li>`).join('')}</ul>`:''}
+  <div class="btns"><button class="btn small" data-a="verAsist" data-v="${c.id}">Ver asistencia</button><button class="btn small ghost" data-a="transcripcion" data-v="${c.id}">Ver transcripción</button></div><div id="tr-${c.id}"></div></div></details>`;
+}
+function vClases(){
+  const lista=S.clases.filter(c=>S.fCurso==='todos'||c.curso_id===S.fCurso);
+  return head('Clases',`${lista.length} ${lista.length===1?'clase':'clases'}`)+chips('curso',S.fCurso,true)+(lista.length?lista.map(claseItem).join(''):vacio('Todavía no hay clases en este curso','Cuando termines una grabación con la caja, la clase aparece aquí.'));
+}
+function vAsistencia(){
+  if(!curso(S.cursoAsist))S.cursoAsist=S.cursos[0]?.id;
+  const cl=clasesDe(S.cursoAsist);
+  if(!cl.find(c=>c.id===S.claseSel))S.claseSel=cl[0]?.id;
+  const base=head('Asistencia','Toca a un alumno para marcarlo o quitarlo.')+chips('cursoAsist',S.cursoAsist,false);
+  if(!cl.length)return base+vacio('Este curso todavía no tiene clases','La asistencia aparece cuando se registre la primera clase.');
+  const al=alumnosDe(S.cursoAsist),set=S.asistMap.get(S.claseSel)||new Set(),n=al.filter(a=>set.has(a.id)).length;
+  const p=al.length?Math.round(n*100/al.length):0,aus=al.filter(a=>!set.has(a.id));
+  return base+`<label class="sr" for="selc" style="position:absolute;left:-9999px">Clase</label><select class="sel" id="selc" data-a="selClase">${cl.map(c=>`<option value="${c.id}" ${c.id===S.claseSel?'selected':''}>${esc(c.tema||'Clase sin tema')}, ${fFecha(c.inicio)}</option>`).join('')}</select>
+  <div class="resumen">${ring(p,112)}<div><strong style="font-size:20px">${n} de ${al.length} presentes</strong><p class="muted">${aus.length?'Faltaron: '+aus.map(corto).map(esc).join(', '):'Asistencia completa.'}</p></div></div>
+  <div class="pads">${al.map(a=>`<button class="pad" data-a="toggle" data-v="${a.id}" aria-pressed="${set.has(a.id)}"><span class="dot">${esc(inic(a))}</span><span>${esc(corto(a))}</span></button>`).join('')}</div>`;
+}
+function filaAlumno(e){
+  const p=pctAlumno(e);
+  return `<div class="row" data-n="${esc((e.nombres+' '+e.apellidos).toLowerCase())}"><span class="av">${esc(inic(e))}</span><div class="grow"><strong>${esc(titulo(e.nombres))}</strong><small>${esc(titulo(e.apellidos))}</small></div>${p==null?'<span class="hora">Sin clases</span>':`<span class="hora">${p}%</span><span class="bar" aria-hidden="true"><i style="width:${p}%"></i></span>`}<button class="icon" data-a="qr" data-v="${e.id}" aria-label="Ver código QR de ${esc(corto(e))}">${icon('qr')}</button></div>`;
+}
+function vAlumnos(){
+  return head('Alumnos',`${S.est.length} en ${S.cursos.length} cursos`)+`<label class="search">${icon('search')}<input type="search" id="busca" placeholder="Buscar alumno" autocomplete="off" aria-label="Buscar alumno"></label>`+
+   S.cursos.map(c=>{const al=alumnosDe(c.id);return `<section class="blk grp"><h2>${esc(c.nombre)}<span class="count">${al.length}</span></h2>${al.map(filaAlumno).join('')}</section>`}).join('');
+}
+function vHorario(){
+  const dias=[...new Set(S.horarios.map(h=>h.dia_semana))].sort();
+  if(!dias.length)return head('Horario','')+vacio('Todavía no hay horario','Agrega las clases del laboratorio para verlas aquí.');
+  return head('Horario','Clases en el laboratorio de robótica')+dias.map(d=>`<section class="blk"><h2>${DIAS[d]}${d===hoyDia()?' <span class="tag">Hoy</span>':''}</h2>${S.horarios.filter(h=>h.dia_semana===d).sort((a,b)=>a.orden-b.orden).map(filaHorario).join('')}</section>`).join('');
+}
+
+/* ---------- Alumno ---------- */
+function vistaAlumno(){
+  const me=S.est[0];
+  if(!me)return `<div class="shell solo"><main class="main solo">${head('Sin acceso','')}${vacio('Tu cuenta todavía no está vinculada a un curso','Pídele a tu profesor que la revise.')}</main></div>`;
+  const cl=S.clases.filter(c=>c.estado==='completada'),mias=new Set(S.asist.map(a=>a.clase_id));
+  const p=cl.length?Math.round(cl.filter(c=>mias.has(c.id)).length*100/cl.length):0;
+  const ult=cl[0],d=hoyDia();
+  const prox=[...S.horarios].sort((a,b)=>((a.dia_semana-d+7)%7)-((b.dia_semana-d+7)%7))[0];
+  const cuando=prox?(((prox.dia_semana-d+7)%7)===0?'Hoy':((prox.dia_semana-d+7)%7)===1?'Mañana':DIAS[prox.dia_semana]):'';
+  return `<div class="shell solo"><main class="main solo">${head(`Hola, ${esc(titulo((me.nombres||'').split(' ')[0]))}`,esc(nomCurso(me.curso_id)))}
+  <section class="hero-al"><div>${ring(p,132)}<p class="cap">de asistencia</p></div><div style="width:100%"><button class="btn arcade" data-a="qr" data-v="${me.id}">${icon('qr')}Mostrar mi código QR</button><p class="muted" style="margin-top:14px;font-size:14px">Acércalo a la cámara de la laptop para registrar tu asistencia.</p></div></section>
+  ${prox?`<section class="blk"><h2>Próxima clase</h2><div class="row"><span class="num">${prox.orden}</span><div class="grow"><strong>${cuando}</strong><small>${esc(prox.materia)} en el laboratorio</small></div>${prox.hora_inicio?`<span class="hora">${esc(prox.hora_inicio.slice(0,5))}</span>`:''}</div></section>`:''}
+  ${ult&&(ult.tareas||[]).length?`<section class="blk"><h2>Tareas de la última clase</h2><ul class="tareas" style="margin-top:12px">${ult.tareas.map(t=>`<li>${esc(t)}</li>`).join('')}</ul></section>`:''}
+  <section class="blk"><h2>Mis clases</h2>${cl.length?cl.map(c=>`<div class="row"><div class="grow"><strong>${esc(c.tema||'Clase sin tema')}</strong><small>${fFecha(c.inicio)}</small></div><span class="pill ${mias.has(c.id)?'ok':'no'}">${mias.has(c.id)?'Asististe':'Faltaste'}</span></div>`).join(''):vacio('Todavía no hay clases','Cuando tu profesor grabe la primera, aparece aquí.')}</section></main></div>`;
+}
+
+/* ---------- Acciones ---------- */
+function mostrarQR(e,mio){
+  const q=qrcode(0,'M');q.addData(e.codigo_qr);q.make();
+  const m=document.createElement('div');m.className='modal';m.setAttribute('role','dialog');m.setAttribute('aria-modal','true');m.setAttribute('aria-label','Código QR');
+  m.innerHTML=`<div class="sheet"><h2>${esc(corto(e))}</h2><img alt="Código QR de asistencia" src="${q.createDataURL(10,2)}"><code>${esc(e.codigo_qr)}</code><button class="btn" data-a="cerrar">Cerrar</button></div>`;
+  m.addEventListener('click',ev=>{if(ev.target===m)m.remove()});
+  document.body.appendChild(m);$('.btn',m).focus();
+}
+async function toggle(estId){
+  const cid=S.claseSel,set=S.asistMap.get(cid)||new Set(),on=set.has(estId);
+  if(on){
+    const {error}=await sb.from('asistencias').delete().eq('clase_id',cid).eq('estudiante_id',estId);
+    if(error)return toast('No se pudo quitar la asistencia.');
+    S.asist=S.asist.filter(a=>!(a.clase_id===cid&&a.estudiante_id===estId));
+  }else{
+    const {error}=await sb.from('asistencias').insert({clase_id:cid,estudiante_id:estId,metodo:'manual'});
+    if(error)return toast('No se pudo marcar la asistencia.');
+    S.asist.push({clase_id:cid,estudiante_id:estId,metodo:'manual'});
+  }
+  armarMapa();render();
+}
+async function transcripcion(id){
+  const box=$('#tr-'+id);if(!box)return;
+  const {data,error}=await sb.from('transcripciones').select('texto').eq('clase_id',id).maybeSingle();
+  if(error)return toast('No se pudo cargar la transcripción.');
+  if(!data){box.innerHTML='';return toast('Esta clase todavía no tiene transcripción.')}
+  box.innerHTML=`<div class="trbox">${esc(data.texto)}</div>`;
+}
+document.addEventListener('click',ev=>{
+  const t=ev.target.closest('[data-a]');if(!t)return;
+  const a=t.dataset.a,v=t.dataset.v;
+  if(a==='tab'){S.tab=v;render();scrollTo(0,0)}
+  else if(a==='curso'){S.fCurso=v;render()}
+  else if(a==='cursoAsist'){S.cursoAsist=v;S.claseSel=null;render()}
+  else if(a==='verAsist'){const c=S.clases.find(x=>x.id===v);S.cursoAsist=c.curso_id;S.claseSel=v;S.tab='asistencia';render();scrollTo(0,0)}
+  else if(a==='toggle')toggle(v);
+  else if(a==='transcripcion')transcripcion(v);
+  else if(a==='qr'){const e=S.est.find(x=>x.id===v);if(e)mostrarQR(e)}
+  else if(a==='cerrar')t.closest('.modal').remove();
+  else if(a==='salir')salir();
+  else if(a==='tema'){const n=document.documentElement.dataset.tema==='dark'?'light':'dark';document.documentElement.dataset.tema=n;try{localStorage.setItem('tema',n)}catch(e){}render()}
+  else if(a==='verpw'){const i=$('#pw');i.type=i.type==='password'?'text':'password'}
+});
+document.addEventListener('change',ev=>{if(ev.target.dataset.a==='selClase'){S.claseSel=ev.target.value;render()}});
+document.addEventListener('input',ev=>{
+  if(ev.target.id!=='busca')return;
+  const q=ev.target.value.trim().toLowerCase();
+  document.querySelectorAll('.grp').forEach(g=>{let vis=0;g.querySelectorAll('.row').forEach(r=>{const ok=!q||r.dataset.n.includes(q);r.style.display=ok?'':'none';if(ok)vis++});g.style.display=vis?'':'none'});
+});
+document.addEventListener('keydown',ev=>{if(ev.key==='Escape'){const m=$('.modal');if(m)m.remove()}});
+function tick(){const el=$('#timer');if(!el)return;const s=Math.max(0,Math.floor((Date.now()-new Date(el.dataset.t))/1000));el.textContent=[Math.floor(s/3600),Math.floor(s/60)%60,s%60].map(n=>String(n).padStart(2,'0')).join(':')}
+setInterval(tick,1000);
+
+/* ---------- Inicio ---------- */
+(async function boot(){
+  try{
+    const {data:{session}}=await sb.auth.getSession();
+    if(session)await entrar(session.user);else renderLogin();
+  }catch(e){renderLogin()}
+})();
+</script>
+</body>
+</html>
